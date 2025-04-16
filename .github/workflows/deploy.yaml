@@ -25,9 +25,11 @@ jobs:
 
     - name: Debugging info
       run: |
+        echo "============================ Debugging Info ============================"
         echo "Deploying to host: ${{ secrets.SERVER_HOST }}"
         echo "Deploying with user: ${{ secrets.SERVER_USER }}"
         echo "Using SSH Key: ${{ secrets.SERVER_SSH_KEY }}"
+        echo "======================================================================="
 
     - name: Create and activate virtual environment
       run: |
@@ -42,37 +44,39 @@ jobs:
         python manage.py collectstatic --no-input
         python manage.py migrate
 
+    - name: Debugging after install and before deploy
+      run: |
+        echo "========================= Debugging Before Deploy ====================="
+        echo "Current directory: $(pwd)"
+        echo "Files in the directory:"
+        ls -al
+        echo "======================================================================="
+
     - name: Deploy via SSH (Copy files to server)
-      uses: appleboy/scp-action@master
-      with:
-        host: ${{ secrets.SERVER_HOST }}
-        username: ${{ secrets.SERVER_USER }}
-        key: ${{ secrets.SERVER_SSH_KEY }}
-        port: 22
-        source: "."  # You can specify the exact source files/folders here
-        target: "/home/kasheetech/production/django/ci-cd"  # Target directory on your server
+      run: |
+        echo "========================= Deploying via SCP ========================="
+        echo "Deploying to host: ${{ secrets.SERVER_HOST }}"
+        echo "Deploying with user: ${{ secrets.SERVER_USER }}"
+        echo "Using SSH Key: ${{ secrets.SERVER_SSH_KEY }}"
+
+        scp -i ${{ secrets.SERVER_SSH_KEY }} -P 22 -r . ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/home/kasheetech/production/django/ci-cd
+
+    - name: Debugging after SCP
+      run: |
+        echo "========================= Debugging After Deploy ====================="
+        echo "Checking if files were deployed:"
+        ssh -i ${{ secrets.SERVER_SSH_KEY }} -p 22 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "ls -al /home/kasheetech/production/django/ci-cd"
+        echo "======================================================================="
 
     - name: Restart Server via SSH (Supervisor)
-      uses: appleboy/ssh-action@master
-      with:
-        host: ${{ secrets.SERVER_HOST }}
-        username: ${{ secrets.SERVER_USER }}
-        key: ${{ secrets.SERVER_SSH_KEY }}
-        port: 22
-        script: |
-          # Navigate to the project directory
+      run: |
+        echo "========================= Restarting Supervisor ======================"
+        ssh -i ${{ secrets.SERVER_SSH_KEY }} -p 22 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
           cd /home/kasheetech/production/django/ci-cd
-
-          # Activate the virtual environment if needed (for running gunicorn or any other commands)
           source venv/bin/activate
-
-          # Pull the latest changes (if not already done by scp-action)
           git pull origin main
-
-          # Run migrations and collectstatic if required again
           python manage.py migrate
           python manage.py collectstatic --no-input
-
-          # Restart the Supervisor service for Django (Gunicorn)
-          sudo supervisorctl restart cicd 
-          
+          sudo supervisorctl restart cicd
+        EOF
+        echo "======================================================================="
