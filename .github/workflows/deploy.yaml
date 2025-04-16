@@ -16,67 +16,66 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
-        python-version: 3.10.12
+        python-version: "3.10.12"
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Run tests
+      run: |
+        python manage.py test
 
     - name: Create .env file
       run: |
-        echo "SECRET_KEY=${{ secrets.SECRET_KEY }}" >> .env
+        echo "SECRET_KEY=${{ secrets.SECRET_KEY }}" > .env
         echo "DEBUG=${{ secrets.DEBUG }}" >> .env
-
-    - name: Debugging info
-      run: |
-        echo "============================ Debugging Info ============================"
-        echo "Deploying to host: ${{ secrets.SERVER_HOST }}"
-        echo "Deploying with user: ${{ secrets.SERVER_USER }}"
-        echo "Using SSH Key: ${{ secrets.SERVER_SSH_KEY }}"
-        echo "======================================================================="
-
-    - name: Create and activate virtual environment
-      run: |
-        python -m venv venv
-        source venv/bin/activate
-        pip install --upgrade pip
-        pip install -r requirements.txt
+        echo "ALLOWED_HOSTS=${{ secrets.ALLOWED_HOSTS }}" >> .env
+        # Add other environment variables as needed
 
     - name: Run Django Migrations & Collectstatic
       run: |
-        source venv/bin/activate
-        python manage.py collectstatic --no-input
+        python manage.py check --deploy
         python manage.py migrate
-
-    - name: Debugging after install and before deploy
-      run: |
-        echo "========================= Debugging Before Deploy ====================="
-        echo "Current directory: $(pwd)"
-        echo "Files in the directory:"
-        ls -al
-        echo "======================================================================="
+        python manage.py collectstatic --no-input
 
     - name: Deploy via SSH (Copy files to server)
-      run: |
-        echo "========================= Deploying via SCP ========================="
-        echo "Deploying to host: ${{ secrets.SERVER_HOST }}"
-        echo "Deploying with user: ${{ secrets.SERVER_USER }}"
-        echo "Using SSH Key: ${{ secrets.SERVER_SSH_KEY }}"
+      uses: appleboy/scp-action@v0.1.7
+      with:
+        host: ${{ secrets.SERVER_HOST }}
+        username: ${{ secrets.SERVER_USER }}
+        key: ${{ secrets.SERVER_SSH_KEY }}
+        port: ${{ secrets.SERVER_PORT || 22 }}
+        source: "."
+        target: "/home/kasheetech/production/django/ci-cd"
+        rm: true  # Remove old files before copying
+        strip_components: 1
 
-        scp -i ${{ secrets.SERVER_SSH_KEY }} -P 22 -r . ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }}:/home/kasheetech/production/django/ci-cd
-
-    - name: Debugging after SCP
-      run: |
-        echo "========================= Debugging After Deploy ====================="
-        echo "Checking if files were deployed:"
-        ssh -i ${{ secrets.SERVER_SSH_KEY }} -p 22 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "ls -al /home/kasheetech/production/django/ci-cd"
-        echo "======================================================================="
+    - name: Install dependencies on server
+      uses: appleboy/ssh-action@v0.1.7
+      with:
+        host: ${{ secrets.SERVER_HOST }}
+        username: ${{ secrets.SERVER_USER }}
+        key: ${{ secrets.SERVER_SSH_KEY }}
+        port: ${{ secrets.SERVER_PORT || 22 }}
+        script: |
+          cd /home/kasheetech/production/django/ci-cd
+          python -m venv venv || true
+          source venv/bin/activate
+          pip install --upgrade pip
+          pip install -r requirements.txt
 
     - name: Restart Server via SSH (Supervisor)
-      run: |
-        echo "========================= Restarting Supervisor ======================"
-        ssh -i ${{ secrets.SERVER_SSH_KEY }} -p 22 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} << 'EOF'
+      uses: appleboy/ssh-action@v0.1.7
+      with:
+        host: ${{ secrets.SERVER_HOST }}
+        username: ${{ secrets.SERVER_USER }}
+        key: ${{ secrets.SERVER_SSH_KEY }}
+        port: ${{ secrets.SERVER_PORT || 22 }}
+        script: |
           cd /home/kasheetech/production/django/ci-cd
           source venv/bin/activate
-          git pull origin main
           python manage.py migrate
           python manage.py collectstatic --no-input
           sudo supervisorctl restart cicd
-        EOF
-        echo "======================================================================="
