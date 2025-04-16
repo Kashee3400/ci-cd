@@ -38,6 +38,9 @@ jobs:
 
     - name: Deploy via SSH (Copy files to server)
       uses: appleboy/scp-action@master
+      run: echo "Deploying to host: ${{ secrets.SERVER_HOST }}"
+      run: echo "Deploying to host: ${{ secrets.SERVER_USER }}"
+      run: echo "Deploying to host: ${{ secrets.SERVER_SSH_KEY }}"
       with:
         host: ${{ secrets.SERVER_HOST }}
         username: ${{ secrets.SERVER_USER }}
@@ -68,5 +71,5 @@ jobs:
           python manage.py collectstatic --no-input
 
           # Restart the Supervisor service for Django (Gunicorn)
-          sudo supervisorctl restart cicd
+          sudo supervisorctl restart cicd 
           
