@@ -1,4 +1,4 @@
-name: Django CI/CD Deploy
+name: Django Simple CI/CD
 
 on:
   push:
@@ -10,55 +10,40 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout Code
-      uses: actions/checkout@v3
+      - name: Checkout Code
+        uses: actions/checkout@v3
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: 3.10.12
+      - name: Deploy Code to Server via SCP
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: 22
+          source: "."
+          target: "/home/kasheetech/production/django/ci-cd"
 
-    - name: Create .env file
-      run: |
-        echo "SECRET_KEY=${{ secrets.SECRET_KEY }}" >> .env
-        echo "DEBUG=${{ secrets.DEBUG }}" >> .env
+      - name: Setup and Restart via SSH
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          port: 22
+          script: |
+            cd /home/kasheetech/production/django/ci-cd
+            if [ ! -d "venv" ]; then
+              python3 -m venv venv
+            fi
+            source venv/bin/activate
+            pip install --upgrade pip
+            pip install -r requirements.txt
 
-    - name: Create and activate virtual environment
-      run: |
-        python -m venv venv
-        source venv/bin/activate
-        pip install --upgrade pip
-        pip install -r requirements.txt
+            echo "SECRET_KEY=${{ secrets.SECRET_KEY }}" > .env
+            echo "DEBUG=${{ secrets.DEBUG }}" >> .env
 
-    - name: Run Django Migrations & Collectstatic
-      run: |
-        source venv/bin/activate
-        python manage.py collectstatic --no-input
-        python manage.py migrate
+            python manage.py migrate
+            python manage.py collectstatic --no-input
 
-    - name: Deploy via SSH (Copy files to server)
-      uses: appleboy/scp-action@master
-      with:
-        host: ${{ secrets.SERVER_HOST }}
-        username: ${{ secrets.SERVER_USER }}
-        key: ${{ secrets.SERVER_SSH_KEY }}
-        port: 22
-        source: "."
-        target: "/home/kasheetech/production/django/ci-cd"
-
-    - name: Restart Server via SSH (Supervisor)
-      uses: appleboy/ssh-action@master
-      with:
-        host: ${{ secrets.SERVER_HOST }}
-        username: ${{ secrets.SERVER_USER }}
-        key: ${{ secrets.SERVER_SSH_KEY }}
-        port: 22
-        script: |
-          cd /home/kasheetech/production/django/ci-cd
-          source venv/bin/activate
-          git pull origin main
-          python manage.py migrate
-          python manage.py collectstatic --no-input
-          sudo supervisorctl restart cicd 
-          sudo service nginx restart
-          
+            sudo supervisorctl restart cicd
+            sudo service nginx restart
