@@ -23,6 +23,12 @@ jobs:
         echo "SECRET_KEY=${{ secrets.SECRET_KEY }}" >> .env
         echo "DEBUG=${{ secrets.DEBUG }}" >> .env
 
+    - name: Debugging info
+      run: |
+        echo "Deploying to host: ${{ secrets.SERVER_HOST }}"
+        echo "Deploying with user: ${{ secrets.SERVER_USER }}"
+        echo "Using SSH Key: ${{ secrets.SERVER_SSH_KEY }}"
+
     - name: Create and activate virtual environment
       run: |
         python -m venv venv
@@ -38,9 +44,6 @@ jobs:
 
     - name: Deploy via SSH (Copy files to server)
       uses: appleboy/scp-action@master
-      run: echo "Deploying to host: ${{ secrets.SERVER_HOST }}"
-      run: echo "Deploying to host: ${{ secrets.SERVER_USER }}"
-      run: echo "Deploying to host: ${{ secrets.SERVER_SSH_KEY }}"
       with:
         host: ${{ secrets.SERVER_HOST }}
         username: ${{ secrets.SERVER_USER }}
